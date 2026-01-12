@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebGPU on GitHub Pages</title>
+    <style>
+        body { margin: 0; background: #121212; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        canvas { width: 400px; height: 400px; border: 2px solid #333; }
+    </style>
+</head>
+<body>
+    <canvas id="gpuCanvas"></canvas>
+    <script type="module">
+        async function init() {
+            if (!navigator.gpu) {
+                alert("WebGPU not supported! Try Chrome/Edge 113+.");
+                return;
+            }
+
+            const adapter = await navigator.gpu.requestAdapter();
+            const device = await adapter.requestDevice();
+            const canvas = document.getElementById('gpuCanvas');
+            const context = canvas.getContext('webgpu');
+
+            const format = navigator.gpu.getPreferredCanvasFormat();
+            context.configure({ device, format });
+
+            // WGSL Shader Code
+            const shaderModule = device.createShaderModule({
+                code: `
+                    @vertex
+                    fn vs_main(@builtin(vertex_index) vertexIndex : u32) -> @builtin(position) vec4f {
+                        var pos = array<vec2f, 3>(
+                            vec2f(0.0, 0.5),
+                            vec2f(-0.5, -0.5),
+                            vec2f(0.5, -0.5)
+                        );
+                        return vec4f(pos[vertexIndex], 0.0, 1.0);
+                    }
+
+                    @fragment
+                    fn fs_main() -> @location(0) vec4f {
+                        return vec4f(0.0, 0.8, 1.0, 1.0); // Cyan color
+                    }
+                `
+            });
+
+            const pipeline = device.createRenderPipeline({
+                layout: 'auto',
+                vertex: { module: shaderModule, entryPoint: 'vs_main' },
+                fragment: { module: shaderModule, entryPoint: 'fs_main', targets: [{ format }] },
+                primitive: { topology: 'triangle-list' }
+            });
+
+            function frame() {
+                const commandEncoder = device.createCommandEncoder();
+                const textureView = context.getCurrentTexture().createView();
+                
+                const renderPass = commandEncoder.beginRenderPass({
+                    colorAttachments: [{
+                        view: textureView,
+                        clearValue: { r: 0.1, g: 0.1, b: 0.1, a: 1.0 },
+                        loadOp: 'clear',
+                        storeOp: 'store'
+                    }]
+                });
+
+                renderPass.setPipeline(pipeline);
+                renderPass.draw(3);
+                renderPass.end();
+
+                device.queue.submit([commandEncoder.finish()]);
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+        }
+
+        init();
+    </script>
+</body>
+</html>
